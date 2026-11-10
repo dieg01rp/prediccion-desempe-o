@@ -23,19 +23,22 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 import os
 
 st.set_page_config(
-    page_title="Prediccion del Desempeno Academico",
+    page_title="Predicción del Desempeño Académico",
     layout="wide"
 )
 
-st.title("Sistema de Prediccion y Evaluacion del Desempeno Academico")
-st.markdown("Plataforma analitica basada en modelos de regresion supervisados (Arboles de Decision, Random Forest y Gradient Boosting).")
+st.title("Sistema de Predicción y Evaluación del Desempeño Académico")
+st.markdown("Plataforma analítica basada en modelos de regresión supervisados (Árboles de Decisión, Random Forest y Gradient Boosting).")
 
-# Carga de datos automatizada desde el repositorio o mediante subida manual
+# Carga de datos robusta
 @st.cache_data
 def cargar_datos():
     archivo_local = "StudentPerformanceFactors.csv"
     if os.path.exists(archivo_local):
-        return pd.read_csv(archivo_local)
+        try:
+            return pd.read_csv(archivo_local)
+        except Exception:
+            return None
     return None
 
 st.sidebar.header("Carga de Datos y Control")
@@ -43,7 +46,10 @@ uploaded_file = st.sidebar.file_uploader("Subir archivo 'StudentPerformanceFacto
 
 df = None
 if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
+    try:
+        df = pd.read_csv(uploaded_file)
+    except Exception as e:
+        st.error(f"Error al leer el archivo subido: {e}")
 else:
     df = cargar_datos()
 
@@ -51,33 +57,33 @@ if df is not None:
     st.sidebar.success(f"Dataset cargado. Filas: {df.shape[0]}, Columnas: {df.shape[1]}")
 
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "1. Exploracion (EDA)",
+        "1. Exploración (EDA)",
         "2. Preprocesamiento y CV",
-        "3. Optimizacion GridSearch",
-        "4. Evaluacion Test y Residuos",
-        "5. Prediccion Nuevos Casos"
+        "3. Optimización GridSearch",
+        "4. Evaluación Test y Residuos",
+        "5. Predicción Nuevos Casos"
     ])
 
     columna_objetivo = 'Exam_Score' if 'Exam_Score' in df.columns else df.columns[-1]
 
     with tab1:
-        st.subheader("Analisis Exploratorio de Datos (EDA)")
+        st.subheader("Análisis Exploratorio de Datos (EDA)")
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("Informacion General del Dataset")
+            st.markdown("Información General del Dataset")
             st.write(f"Variable Objetivo seleccionada: **{columna_objetivo}**")
             st.dataframe(df.head())
         with col2:
-            st.markdown("Distribucion de la Puntuacion")
+            st.markdown("Distribución de la Puntuación")
             if columna_objetivo in df.columns:
                 fig, ax = plt.subplots(figsize=(7, 4))
                 sns.histplot(df[columna_objetivo], bins=30, kde=True, ax=ax, color='#1f4e78')
-                ax.set_title("Distribucion de la Variable Objetivo")
+                ax.set_title("Distribución de la Variable Objetivo")
                 st.pyplot(fig)
             else:
                 st.warning(f"La columna objetivo '{columna_objetivo}' no se encuentra en el dataset.")
 
-        st.markdown("Matriz de Correlacion de Variables Numericas")
+        st.markdown("Matriz de Correlación de Variables Numéricas")
         fig, ax = plt.subplots(figsize=(10, 5))
         sns.heatmap(df.select_dtypes(include=[np.number]).corr(), annot=True, cmap='vlag', fmt='.2f', ax=ax, annot_kws={"size": 8})
         st.pyplot(fig)
@@ -86,9 +92,8 @@ if df is not None:
         X = df.drop(columns=[columna_objetivo])
         y = df[columna_objetivo]
 
-        # Correccion para evitar la advertencia de Pandas con tipos object/string/category
-        columnas_numericas = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
-        columnas_categoricas = X.select_dtypes(include=['object', 'category', 'string']).columns.tolist()
+        columnas_numericas = X.select_dtypes(include=[np.number]).columns.tolist()
+        columnas_categoricas = X.select_dtypes(include=['object', 'category']).columns.tolist()
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
 
@@ -112,10 +117,10 @@ if df is not None:
         pipe_gb = Pipeline(steps=[('preprocesamiento', preprocesador), ('modelo', GradientBoostingRegressor(random_state=42))])
 
         with tab2:
-            st.subheader("Validacion Cruzada Base (5-Folds)")
-            st.markdown("Comparacion inicial de los tres modelos utilizando validacion cruzada sin optimizacion de hiperparametros.")
+            st.subheader("Validación Cruzada Base (5-Folds)")
+            st.markdown("Comparación inicial de los tres modelos utilizando validación cruzada sin optimización de hiperparámetros.")
 
-            if st.button("Ejecutar Validacion Cruzada Base"):
+            if st.button("Ejecutar Validación Cruzada Base"):
                 with st.spinner("Entrenando modelos base..."):
                     esquema_cv = KFold(n_splits=5, shuffle=True, random_state=42)
                     scoring_metrics = {'rmse': 'neg_root_mean_squared_error', 'mae': 'neg_mean_absolute_error', 'r2': 'r2'}
@@ -138,11 +143,11 @@ if df is not None:
                     df_res_base = pd.DataFrame(resultados_base)
                     st.dataframe(df_res_base.round(4))
             else:
-                st.info("Haz clic en el boton para calcular los resultados de validacion cruzada base.")
+                st.info("Haz clic en el botón para calcular los resultados de validación cruzada base.")
 
         with tab3:
-            st.subheader("Optimizacion de Hiperparametros (GridSearchCV)")
-            st.markdown("Busqueda exhaustiva de la mejor configuracion de hiperparametros para cada modelo dentro del conjunto de entrenamiento.")
+            st.subheader("Optimización de Hiperparámetros (GridSearchCV)")
+            st.markdown("Búsqueda exhaustiva de la mejor configuración de hiperparámetros para cada modelo dentro del conjunto de entrenamiento.")
 
             modelo_sel = st.selectbox("Seleccionar modelo a optimizar", ["Decision Tree", "Random Forest", "Gradient Boosting"])
 
@@ -162,17 +167,17 @@ if df is not None:
                     grid = GridSearchCV(est, p_grid, cv=esquema_cv, scoring='neg_root_mean_squared_error', n_jobs=-1, refit=True)
                     grid.fit(X_train, y_train)
 
-                    st.success(f"Optimizacion completada para {modelo_sel}")
-                    st.write("**Mejores Parametros:**", grid.best_params_)
+                    st.success(f"Optimización completada para {modelo_sel}")
+                    st.write("**Mejores Parámetros:**", grid.best_params_)
                     st.metric("Mejor RMSE en CV", f"{-grid.best_score_:.4f}")
             else:
-                st.info("Selecciona un modelo y haz clic para iniciar la busqueda de hiperparametros.")
+                st.info("Selecciona un modelo y haz clic para iniciar la búsqueda de hiperparámetros.")
 
         with tab4:
-            st.subheader("Evaluacion Final en Test y Analisis de Residuos")
-            st.markdown("Entrenamiento del modelo optimizado (Gradient Boosting por defecto como referencia ganadora) y evaluacion estricta en el conjunto de prueba aislado.")
+            st.subheader("Evaluación Final en Test y Análisis de Residuos")
+            st.markdown("Entrenamiento del modelo optimizado (Gradient Boosting por defecto como referencia ganadora) y evaluación estricta en el conjunto de prueba aislado.")
 
-            if st.button("Ejecutar Evaluacion Final en Test"):
+            if st.button("Ejecutar Evaluación Final en Test"):
                 with st.spinner("Entrenando y evaluando..."):
                     pipe_gb.fit(X_train, y_train)
                     y_pred = pipe_gb.predict(X_test)
@@ -194,11 +199,11 @@ if df is not None:
                     ax.set_title("Real vs Predicho en Test")
                     st.pyplot(fig)
             else:
-                st.info("Haz clic para generar la evaluacion final en el conjunto de prueba.")
+                st.info("Haz clic para generar la evaluación final en el conjunto de prueba.")
 
         with tab5:
-            st.subheader("Prediccion para Nuevos Estudiantes")
-            st.markdown("Introduce valores para generar una estimacion de la puntuacion final utilizando el pipeline entrenado.")
+            st.subheader("Predicción para Nuevos Estudiantes")
+            st.markdown("Introduce valores para generar una estimación de la puntuación final utilizando el pipeline entrenado.")
 
             input_data = {}
             colms = st.columns(2)
@@ -218,12 +223,13 @@ if df is not None:
                     opciones = X[col].dropna().unique().tolist()
                     input_data[col] = opciones[0] if len(opciones) > 0 else "N/A"
 
-            if st.button("Predecir Puntuacion"):
+            if st.button("Predecir Puntuación"):
                 df_nuevo = pd.DataFrame([input_data])
                 pipe_gb.fit(X_train, y_train)
                 prediccion_final = pipe_gb.predict(df_nuevo)[0]
-                st.success(f"Puntuacion estimada del examen: **{prediccion_final:.2f} puntos**")
+                st.success(f"Puntuación estimada del examen: **{prediccion_final:.2f} puntos**")
     else:
-        st.error(f"La columna objetivo '{columna_objetivo}' no esta presente en el dataset cargado.")
+        st.error(f"La columna objetivo '{columna_objetivo}' no está presente en el dataset cargado.")
 else:
-    st.error("No se encontro el archivo 'StudentPerformanceFactors.csv' en el repositorio de GitHub. Asegurate de subirlo junto al app.py.")
+    st.warning("⚠️ No se encontró el archivo 'StudentPerformanceFactors.csv' en el repositorio de GitHub.")
+    st.info("Por favor, asegúrate de subir el archivo CSV directamente en la raíz de tu repositorio en GitHub junto con tu archivo `app.py`, o cárgalo de forma manual usando el botón de la barra lateral izquierda.")
