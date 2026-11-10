@@ -20,7 +20,6 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-import urllib.request
 import os
 
 st.set_page_config(
@@ -31,22 +30,13 @@ st.set_page_config(
 st.title("Sistema de Prediccion y Evaluacion del Desempeno Academico")
 st.markdown("Plataforma analitica basada en modelos de regresion supervisados (Arboles de Decision, Random Forest y Gradient Boosting).")
 
-# Carga automatica o por carga de archivo del dataset Student Performance Factors
+# Carga de datos automatizada desde el repositorio o mediante subida manual
 @st.cache_data
 def cargar_datos():
-    url = "https://raw.githubusercontent.com/datasets/sample-datasets/master/data/student-por.csv" # Enlace referencial o carga local si existe
     archivo_local = "StudentPerformanceFactors.csv"
-
     if os.path.exists(archivo_local):
-        df = pd.read_csv(archivo_local)
-    else:
-        # Intentar buscar o crear un DataFrame sintetico/base si no esta presente para que la app no falle al iniciar
-        try:
-            df = pd.read_csv(archivo_local)
-        except:
-            st.sidebar.warning("No se encontro 'StudentPerformanceFactors.csv'. Por favor, suba el archivo CSV mediante el menu lateral.")
-            return None
-    return df
+        return pd.read_csv(archivo_local)
+    return None
 
 st.sidebar.header("Carga de Datos y Control")
 uploaded_file = st.sidebar.file_uploader("Subir archivo 'StudentPerformanceFactors.csv'", type=["csv"])
@@ -55,13 +45,11 @@ df = None
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
 else:
-    if os.path.exists("StudentPerformanceFactors.csv"):
-        df = pd.read_csv("StudentPerformanceFactors.csv")
+    df = cargar_datos()
 
 if df is not None:
     st.sidebar.success(f"Dataset cargado. Filas: {df.shape[0]}, Columnas: {df.shape[1]}")
 
-    # Pestañas de navegacion de la app
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "1. Exploracion (EDA)",
         "2. Preprocesamiento y CV",
@@ -70,7 +58,6 @@ if df is not None:
         "5. Prediccion Nuevos Casos"
     ])
 
-    # Limpieza basica y separacion para los modelos
     columna_objetivo = 'Exam_Score' if 'Exam_Score' in df.columns else df.columns[-1]
 
     with tab1:
@@ -95,13 +82,13 @@ if df is not None:
         sns.heatmap(df.select_dtypes(include=[np.number]).corr(), annot=True, cmap='vlag', fmt='.2f', ax=ax, annot_kws={"size": 8})
         st.pyplot(fig)
 
-    # Preparar X, y y pipelines para las siguientes pestañas
     if columna_objetivo in df.columns:
         X = df.drop(columns=[columna_objetivo])
         y = df[columna_objetivo]
 
+        # Correccion para evitar la advertencia de Pandas con tipos object/string/category
         columnas_numericas = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
-        columnas_categoricas = X.select_dtypes(include=['object', 'category']).columns.tolist()
+        columnas_categoricas = X.select_dtypes(include=['object', 'category', 'string']).columns.tolist()
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.20, random_state=42)
 
@@ -154,8 +141,8 @@ if df is not None:
                 st.info("Haz clic en el boton para calcular los resultados de validacion cruzada base.")
 
         with tab3:
-            st.subheader("Optimización de Hiperparámetros (GridSearchCV)")
-            st.markdown("Búsqueda exhaustiva de la mejor configuración de hiperparámetros para cada modelo dentro del conjunto de entrenamiento.")
+            st.subheader("Optimizacion de Hiperparametros (GridSearchCV)")
+            st.markdown("Busqueda exhaustiva de la mejor configuracion de hiperparametros para cada modelo dentro del conjunto de entrenamiento.")
 
             modelo_sel = st.selectbox("Seleccionar modelo a optimizar", ["Decision Tree", "Random Forest", "Gradient Boosting"])
 
@@ -175,17 +162,17 @@ if df is not None:
                     grid = GridSearchCV(est, p_grid, cv=esquema_cv, scoring='neg_root_mean_squared_error', n_jobs=-1, refit=True)
                     grid.fit(X_train, y_train)
 
-                    st.success(f"Optimización completada para {modelo_sel}")
-                    st.write("**Mejores Parámetros:**", grid.best_params_)
+                    st.success(f"Optimizacion completada para {modelo_sel}")
+                    st.write("**Mejores Parametros:**", grid.best_params_)
                     st.metric("Mejor RMSE en CV", f"{-grid.best_score_:.4f}")
             else:
                 st.info("Selecciona un modelo y haz clic para iniciar la busqueda de hiperparametros.")
 
         with tab4:
-            st.subheader("Evaluación Final en Test y Análisis de Residuos")
-            st.markdown("Entrenamiento del modelo optimizado (Gradient Boosting por defecto como referencia ganadora) y evaluación estricta en el conjunto de prueba aislado.")
+            st.subheader("Evaluacion Final en Test y Analisis de Residuos")
+            st.markdown("Entrenamiento del modelo optimizado (Gradient Boosting por defecto como referencia ganadora) y evaluacion estricta en el conjunto de prueba aislado.")
 
-            if st.button("Ejecutar Evaluación Final en Test"):
+            if st.button("Ejecutar Evaluacion Final en Test"):
                 with st.spinner("Entrenando y evaluando..."):
                     pipe_gb.fit(X_train, y_train)
                     y_pred = pipe_gb.predict(X_test)
@@ -210,13 +197,12 @@ if df is not None:
                 st.info("Haz clic para generar la evaluacion final en el conjunto de prueba.")
 
         with tab5:
-            st.subheader("Predicción para Nuevos Estudiantes")
+            st.subheader("Prediccion para Nuevos Estudiantes")
             st.markdown("Introduce valores para generar una estimacion de la puntuacion final utilizando el pipeline entrenado.")
 
-            # Formulario interactivo dinamico basado en las primeras columnas predictoras
             input_data = {}
             colms = st.columns(2)
-            for i, col in enumerate(X.columns[:6]): # Mostrar hasta 6 campos principales para agilizar
+            for i, col in enumerate(X.columns[:6]):
                 with colms[i % 2]:
                     if col in columnas_numericas:
                         val_default = float(X[col].mean()) if not pd.isna(X[col].mean()) else 0.0
@@ -225,7 +211,6 @@ if df is not None:
                         opciones = X[col].dropna().unique().tolist()
                         input_data[col] = st.selectbox(f"{col}", opciones if len(opciones) > 0 else ["N/A"])
 
-            # Rellenar el resto de columnas con valores por defecto si hay mas de 6
             for col in X.columns[6:]:
                 if col in columnas_numericas:
                     input_data[col] = float(X[col].mean()) if not pd.isna(X[col].mean()) else 0.0
@@ -241,4 +226,4 @@ if df is not None:
     else:
         st.error(f"La columna objetivo '{columna_objetivo}' no esta presente en el dataset cargado.")
 else:
-    st.info("Por favor, suba el archivo 'StudentPerformanceFactors.csv' o asegurese de que este disponible en el entorno para iniciar.")
+    st.error("No se encontro el archivo 'StudentPerformanceFactors.csv' en el repositorio de GitHub. Asegurate de subirlo junto al app.py.")
